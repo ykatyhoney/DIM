@@ -112,16 +112,26 @@ export function processItems(
         bucketDef.category !== BucketCategory.Invisible &&
         bucketDef.displayProperties.name
       ) {
-        const itemDef = defs.InventoryItem.get(item.itemHash);
-        reportException('setting store hadErrors', new Error('setting store hadErrors'), {
-          itemHash: item.itemHash,
-          hasDefinition: Boolean(itemDef),
-          hasName: Boolean(itemDef?.displayProperties.name),
-          hasQuestLineName: Boolean(itemDef?.setData?.questLineName),
-          itemBucketHash: item.bucketHash,
-          defBucketHash: itemDef?.inventory?.bucketTypeHash,
-          bucketName: bucketDef.displayProperties.name,
-        });
+        // getOptional so we don't log a second hashLookupFailure for a hash we
+        // already know is missing.
+        const itemDef = defs.InventoryItem.getOptional(item.itemHash);
+        // An item with no definition at all is almost always a classified/unreleased
+        // item that Bungie placed in the inventory but stripped from the manifest.
+        // That's expected, so don't report it. We still flag the store as hadErrors
+        // (so an out-of-date manifest gets refreshed, and so we don't purge the item's
+        // tags/notes), but only report to Sentry when we *have* a definition and still
+        // failed to build the item - that points at an actual DIM bug.
+        if (itemDef) {
+          reportException('setting store hadErrors', new Error('setting store hadErrors'), {
+            itemHash: item.itemHash,
+            hasDefinition: true,
+            hasName: Boolean(itemDef.displayProperties.name),
+            hasQuestLineName: Boolean(itemDef.setData?.questLineName),
+            itemBucketHash: item.bucketHash,
+            defBucketHash: itemDef.inventory?.bucketTypeHash,
+            bucketName: bucketDef.displayProperties.name,
+          });
+        }
         owner.hadErrors = true;
       }
     }
